@@ -12,6 +12,8 @@ const jsonContentType = "application/json"
 var (
 	Success = map[string]string{"code" : "200", "msg" : "success"}
 	ErrUserNotFound = map[string]string{"code" : "20001", "msg" : "user not found"}
+	ErrRoomNotFound = map[string]string{"code" : "20002", "msg" : "room not found"}
+	ErrRoomUnavailable = map[string]string{"code" : "20003", "msg" : "room is playing"}
 	ErrInvalidRequest = map[string]string{"code" : "10001", "msg" : "invalid request"}
 	SystemErr = map[string]string{"code" : "500", "msg" : "system error"}
 )

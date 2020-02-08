@@ -24,12 +24,10 @@ func Set(key string, value interface{}){
 	}
 }
 
-func Get(key string) interface{}{
+func Get(key string) []byte{
 	reply, e := redis.String(conn.Do("GET", key))
 	if e != nil {
 		fmt.Println(e)
 	}
-	var replyJson interface{}
-	json.Unmarshal([]byte(reply), &replyJson)
-	return replyJson
+	return []byte(reply)
 }
