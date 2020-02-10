@@ -23,6 +23,19 @@ type Info struct {
 	Id string
 	Status int
 	User map[string]user.Info
+	UserConn map[string]*websocket.Conn
+}
+
+//todo 创建一个全局的map map[房间id][websocket.Conn的map]
+
+type ConnMap map[string]roomConns
+
+type roomConns map[string]*websocket.Conn
+
+var connMap ConnMap
+
+func Init(){
+	connMap = make(ConnMap)
 }
 
 func Chat(ws *websocket.Conn){
@@ -33,6 +46,7 @@ func Chat(ws *websocket.Conn){
 		var result []byte
 
 		if err = websocket.Message.Receive(ws, &body); err != nil {
+			//TODO 离开逻辑
 			fmt.Println(err)
 			break
 		}
@@ -45,16 +59,21 @@ func Chat(ws *websocket.Conn){
 
 		switch m["method"] {
 		case "create":
-			result = create(m, &info)
+			result = create(m, &info, ws)
 			break
 		case "join":
-			result = join(m, &info)
+			result = join(m, &info, ws)
 			break
 		case "send":
-			result = send(ws, m)
+			send(m, info)
+			result = nil
 			break
 		default:
 			result = []byte("{'code': 500;'msg' : 'wrong msg format'}")
+		}
+
+		if result == nil {
+			continue
 		}
 
 		if err = websocket.Message.Send(ws, string(result)); err != nil {
@@ -64,11 +83,16 @@ func Chat(ws *websocket.Conn){
 	}
 }
 
-func send(ws *websocket.Conn, m map[string]string){
-
+func send(m map[string]string, info Info){
+	for _, ws := range info.UserConn {
+		if err := websocket.Message.Send(ws, string(result)); err != nil {
+			fmt.Println("下发数据时错误：" + err.Error())
+			continue
+		}
+	}
 }
 
-func create(m map[string]string, info *Info) (result []byte){
+func create(m map[string]string, info *Info, ws *websocket.Conn) (result []byte){
 	if _ ,ok := m["user_id"]; !ok {
 		return helper.Respond(helper.ErrInvalidRequest, nil)
 	}
@@ -78,13 +102,15 @@ func create(m map[string]string, info *Info) (result []byte){
 		return helper.Respond(helper.ErrUserNotFound, nil)
 	}
 	json.Unmarshal(userInfoByte, &userInfo)
-	info = &Info{createId(), statusReady, make(map[string]user.Info)}
+	info = &Info{createId(), statusReady, make(map[string]user.Info), make(map[string]*websocket.Conn)}
 	info.User[userInfo.Id] = userInfo
+	info.UserConn[userInfo.Id] = ws
 	database.Set(info.Id, info)
+	connMap[info.Id] = map[string]*websocket.Conn{userInfo.Id : ws}
 	return helper.Respond(helper.Success, info)
 }
 
-func join(m map[string]string, info *Info) (result []byte){
+func join(m map[string]string, info *Info, ws *websocket.Conn) (result []byte){
 	if _ ,ok := m["user_id"]; !ok {
 		return helper.Respond(helper.ErrInvalidRequest, nil)
 	}
@@ -109,8 +135,10 @@ func join(m map[string]string, info *Info) (result []byte){
 	}
 
 	room.User[userInfo.Id] = userInfo
+	room.UserConn[userInfo.Id] = ws
 	database.Set(room.Id, room)
 	info = &room
+	connMap[info.Id][userInfo.Id] = ws
 	return helper.Respond(helper.Success, room)
 }
 

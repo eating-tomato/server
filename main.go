@@ -3,6 +3,7 @@ package main
 
 import (
 	"server/database"
+	"server/room"
 	"server/server"
 )
 
@@ -11,5 +12,6 @@ import (
 
 func main() {
 	database.Conn()
+	room.Init()
 	server.Serve()
 }
