@@ -20,10 +20,9 @@ var (
 )
 
 type Info struct {
-	Id string
-	Status int
-	User map[string]user.Info
-	UserConn map[string]*websocket.Conn
+	Id       string
+	Status   int
+	User     map[string]user.Info
 }
 
 //todo 创建一个全局的map map[房间id][websocket.Conn的map]
@@ -41,6 +40,7 @@ func Init(){
 func Chat(ws *websocket.Conn){
 	var err error
 	var info Info
+	var userInfo user.Info
 	for {
 		var body string
 		var result []byte
@@ -59,13 +59,14 @@ func Chat(ws *websocket.Conn){
 
 		switch m["method"] {
 		case "create":
-			result = create(m, &info, ws)
+			result, userInfo = create(m, &info, ws)
+			fmt.Println(info)
 			break
 		case "join":
-			result = join(m, &info, ws)
+			result, userInfo = join(m, &info, ws)
 			break
 		case "send":
-			send(m, info)
+			send(m, info, userInfo)
 			result = nil
 			break
 		default:
@@ -83,63 +84,75 @@ func Chat(ws *websocket.Conn){
 	}
 }
 
-func send(m map[string]string, info Info){
-	for _, ws := range info.UserConn {
-		if err := websocket.Message.Send(ws, string(result)); err != nil {
+func send(m map[string]string, info Info, user user.Info){
+	fmt.Println(info.Id)
+	fmt.Println(connMap)
+	if _, ok := connMap[info.Id]; !ok {
+		//没有对应的连接
+		fmt.Println("没有对应的连接")
+		return
+	}
+
+	if _, ok := m["msg"]; !ok {
+		//消息为空
+		fmt.Println("消息为空")
+		return
+	}
+
+	body, _ := json.Marshal(map[string]string{"type" : "msg", "msg" : m["msg"], "from" : user.Username})
+	for _, ws := range connMap[info.Id] {
+		if err := websocket.Message.Send(ws, string(body)); err != nil {
 			fmt.Println("下发数据时错误：" + err.Error())
 			continue
 		}
 	}
 }
 
-func create(m map[string]string, info *Info, ws *websocket.Conn) (result []byte){
+func create(m map[string]string, info *Info, ws *websocket.Conn) (result []byte, userInfo user.Info){
 	if _ ,ok := m["user_id"]; !ok {
-		return helper.Respond(helper.ErrInvalidRequest, nil)
+		return helper.Respond(helper.ErrInvalidRequest, nil), userInfo
 	}
 	userInfoByte := database.Get(m["user_id"])
-	userInfo := user.Info{}
 	if userInfoByte == nil {
-		return helper.Respond(helper.ErrUserNotFound, nil)
+		return helper.Respond(helper.ErrUserNotFound, nil), userInfo
 	}
 	json.Unmarshal(userInfoByte, &userInfo)
-	info = &Info{createId(), statusReady, make(map[string]user.Info), make(map[string]*websocket.Conn)}
+	*info = Info{createId(), statusReady, make(map[string]user.Info)}
 	info.User[userInfo.Id] = userInfo
-	info.UserConn[userInfo.Id] = ws
 	database.Set(info.Id, info)
 	connMap[info.Id] = map[string]*websocket.Conn{userInfo.Id : ws}
-	return helper.Respond(helper.Success, info)
+	return helper.Respond(helper.Success, info), userInfo
 }
 
-func join(m map[string]string, info *Info, ws *websocket.Conn) (result []byte){
+func join(m map[string]string, info *Info, ws *websocket.Conn) (result []byte, userInfo user.Info){
 	if _ ,ok := m["user_id"]; !ok {
-		return helper.Respond(helper.ErrInvalidRequest, nil)
+		return helper.Respond(helper.ErrInvalidRequest, nil), userInfo
 	}
 	if _ ,ok := m["room_id"]; !ok {
-		return helper.Respond(helper.ErrInvalidRequest, nil)
+		return helper.Respond(helper.ErrInvalidRequest, nil), userInfo
 	}
 
 	roomByte := database.Get(m["room_id"])
-	room := Info{}
+	room := Info{"", 0, make(map[string]user.Info)}
 	if roomByte == nil {
-		return helper.Respond(helper.ErrRoomNotFound, nil)
+		return helper.Respond(helper.ErrRoomNotFound, nil), userInfo
 	}
 	json.Unmarshal(roomByte, &room)
 	if room.Status != statusReady{
-		return helper.Respond(helper.ErrRoomUnavailable, nil)
+		return helper.Respond(helper.ErrRoomUnavailable, nil), userInfo
 	}
 
 	userInfoByte := database.Get(m["user_id"])
-	userInfo := user.Info{}
 	if userInfoByte == nil {
-		return helper.Respond(helper.ErrUserNotFound, nil)
+		return helper.Respond(helper.ErrUserNotFound, nil), userInfo
 	}
 
 	room.User[userInfo.Id] = userInfo
-	room.UserConn[userInfo.Id] = ws
 	database.Set(room.Id, room)
-	info = &room
+	*info = room
 	connMap[info.Id][userInfo.Id] = ws
-	return helper.Respond(helper.Success, room)
+	fmt.Println(connMap)
+	return helper.Respond(helper.Success, room), userInfo
 }
 
 func createId() string{

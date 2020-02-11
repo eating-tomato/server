@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script>
+        var ws = new WebSocket("ws://localhost:8080/chat");
+
+
+        //【用于指定连接成功后的回调函数】
+        ws.onopen = function (evt) {
+            console.log("Connection open ...");
+            ws.send("{\n" +
+                "\t\"method\" : \"join\",\n" +
+                "\t\"room_id\" : \"ROOM_86069ef596911eb0896f9cec72532d01\",\n" +
+                "\t\"user_id\" : \"ROOM_db55c93cdbe9eb82e0f7a4f4ce41ea81\"\n" +
+                "}");
+        };
+
+
+        //【用于指定收到服务器数据后的回调函数】
+        //【服务器数据有可能是文本，也有可能是二进制数据，需要判断】
+        ws.onmessage = function (event) {
+            console.log("Received Message: " + event.data);
+        };
+
+        //[【于指定连接关闭后的回调函数。】
+        ws.onclose = function (evt) {
+            console.log("Connection closed.");
+        };
+
+        //发送文本
+
+
+        ws.onerror = function (event) {
+        };
+
+
+    </script>
+</head>
+<body>
+
+</body>
+</html>
